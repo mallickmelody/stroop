@@ -10,6 +10,7 @@ pipeline = pickle.load(open("stroop_model.pkl", "rb"))
 # ------------------ CONFIG ------------------
 COLORS = ["RED", "GREEN", "BLUE"]
 COLOR_MAP = {"RED": "red", "GREEN": "green", "BLUE": "blue"}
+TOTAL_TRIALS = 20
 
 # ------------------ HELPERS ------------------
 def reset_test():
@@ -39,10 +40,14 @@ if not st.session_state.started:
         st.session_state.start_time = time.time()
 
 # ------------------ STROOP TRIALS ------------------
-if st.session_state.started and st.session_state.trial < 20:
+if st.session_state.started and st.session_state.trial < TOTAL_TRIALS:
 
+    # Show trial progress
+    st.write(f"Trial {st.session_state.trial + 1} of {TOTAL_TRIALS}")
+    st.progress((st.session_state.trial + 1)/TOTAL_TRIALS)
+
+    # Pick trial type
     is_congruent = random.choice([True, False])
-
     if is_congruent:
         word = ink = random.choice(COLORS)
     else:
@@ -54,6 +59,7 @@ if st.session_state.started and st.session_state.trial < 20:
         unsafe_allow_html=True
     )
 
+    # User response
     choice = st.radio("Select the INK color:", COLORS, key=f"trial_{st.session_state.trial}")
 
     if st.button("Submit", key=f"submit_{st.session_state.trial}"):
@@ -70,11 +76,8 @@ if st.session_state.started and st.session_state.trial < 20:
         st.session_state.trial += 1
         st.session_state.start_time = time.time()
 
-        # Safe rerun
-        st.experimental_rerun()
-
 # ------------------ RESULTS ------------------
-elif st.session_state.started and st.session_state.trial >= 20:
+if st.session_state.started and st.session_state.trial >= TOTAL_TRIALS:
 
     mean_cong = np.mean(st.session_state.cong_rt)
     mean_incong = np.mean(st.session_state.incong_rt)
@@ -104,4 +107,3 @@ elif st.session_state.started and st.session_state.trial >= 20:
 
     if st.button("Restart Test"):
         reset_test()
-        st.experimental_rerun()
