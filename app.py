@@ -82,6 +82,7 @@ if st.session_state.stage == "instructions":
         st.session_state.current_idx = 0
         st.session_state.results = []
         st.session_state.start_time = time.time()
+        st.experimental_rerun()  # only needed here once
 
 # ---------------- Test Screen ----------------
 elif st.session_state.stage == "test":
@@ -95,23 +96,23 @@ elif st.session_state.stage == "test":
         st.write(f"Trial {idx+1} / {NUM_QUESTIONS}")
         show_stimulus(trial)
 
-        if st.session_state.start_time is None:
+        if "start_time" not in st.session_state or st.session_state.start_time is None:
             st.session_state.start_time = time.time()
 
         # Color buttons
         cols = st.columns(len(COLOR_NAMES))
-        clicked_color = None
         for i, color in enumerate(COLOR_NAMES):
             if cols[i].button(color, key=f"trial_{idx}_{color}"):
-                clicked_color = color[0]
+                # Record response
+                rt = time.time() - st.session_state.start_time
+                record_response(trial, color[0], rt)
+                st.session_state.current_idx += 1
+                st.session_state.start_time = None
 
-        # Record response and advance trial
-        if clicked_color:
-            rt = time.time() - st.session_state.start_time
-            record_response(trial, clicked_color, rt)
-            st.session_state.current_idx += 1
-            st.session_state.start_time = None
-            time.sleep(ISI)  # short interval before next trial
+        # Move to results automatically if last trial finished
+        if st.session_state.current_idx >= NUM_QUESTIONS:
+            st.session_state.stage = "results"
+            st.session_state.test_finished = True
 
 # ---------------- Results Screen ----------------
 elif st.session_state.stage == "results" and st.session_state.test_finished:
@@ -160,3 +161,4 @@ elif st.session_state.stage == "results" and st.session_state.test_finished:
 
     if st.button("Restart Test"):
         reset_session()
+        st.experimental_rerun()
