@@ -1,129 +1,164 @@
 import streamlit as st
 import random
 import time
+import pandas as pd
 import numpy as np
 import pickle
-import pandas as pd
 
-# ------------------ LOAD MODEL PIPELINE ------------------
-pipeline = pickle.load(open("stroop_model.pkl", "rb"))
+# ---------------- Load ML model ----------------
+model = pickle.load(open("stroop_model.pkl", "rb"))
 
-# ------------------ CONFIG ------------------
-COLORS = ["RED", "GREEN", "BLUE"]
-COLOR_MAP = {"RED": "red", "GREEN": "green", "BLUE": "blue"}
-TOTAL_TRIALS = 20
+# ---------------- Stroop Config ----------------
+COLOR_NAMES = ["RED", "GREEN", "BLUE", "YELLOW"]
+COLOR_HEX = {
+    "RED": "#d62828",
+    "GREEN": "#2a9d8f",
+    "BLUE": "#0077b6",
+    "YELLOW": "#f4d35e"
+}
+NUM_QUESTIONS = 20
+ISI = 0.3  # inter-trial interval in seconds
 
-# ------------------ HELPERS ------------------
-def reset_test():
-    st.session_state.started = False
-    st.session_state.trial = 0
-    st.session_state.age = 0
-    st.session_state.trials_data = []  # List of dicts: store each trial
-    st.session_state.start_time = 0
+# ---------------- Helper Functions ----------------
+def make_trial():
+    word = random.choice(COLOR_NAMES)
+    ink = random.choice(COLOR_NAMES)
+    return {"word": word, "ink": ink}
+
+def show_stimulus(trial):
+    st.markdown(
+        f"<div style='text-align:center; margin-top:50px;'>"
+        f"<span style='font-size:100px; font-weight:700; color:{COLOR_HEX[trial['ink']]};'>{trial['word']}</span>"
+        f"</div>", unsafe_allow_html=True
+    )
+
+def record_response(trial, response, rt):
+    correct = int(response.upper() == trial["ink"][0])
+    st.session_state.results.append({
+        "trial": st.session_state.current_idx + 1,
+        "word": trial["word"],
+        "ink": trial["ink"],
+        "response": response.upper(),
+        "correct": correct,
+        "reaction_time_s": rt
+    })
+
+def reset_session():
+    st.session_state.stage = "instructions"
+    st.session_state.trials = [make_trial() for _ in range(NUM_QUESTIONS)]
+    st.session_state.current_idx = 0
+    st.session_state.results = []
+    st.session_state.start_time = None
+    st.session_state.user_age = None
     st.session_state.test_finished = False
 
-def next_trial():
-    st.session_state.trial += 1
-    st.session_state.start_time = time.time()
+# ---------------- Session State Init ----------------
+if "stage" not in st.session_state:
+    reset_session()
 
-# ------------------ SESSION STATE ------------------
-if "started" not in st.session_state:
-    reset_test()
+st.set_page_config(page_title="Stroop Test", layout="centered")
 
-# ------------------ FIRST SCREEN: INSTRUCTIONS ------------------
-if not st.session_state.started:
-    st.title("Stroop Cognitive Assessment")
-    st.subheader("Instructions:")
+# ---------------- UI ----------------
+st.title("🧠 Stroop Cognitive Test")
+st.write("Select the **ink color** of the word as fast and accurately as possible.")
+
+# ---------------- Instructions Screen ----------------
+if st.session_state.stage == "instructions":
+    st.header("Instructions")
     st.markdown("""
-    1. Select your age using the slider.  
-    2. Click **Start Test** to begin.  
-    3. You will see 20 words, **one at a time**.  
-    4. Select the **INK color** of the word (not the word itself).  
-    5. Your reaction time, correctness, and interference will be recorded.  
-    6. At the end, your results will be displayed.  
+        - You will see a color word displayed in colored ink.
+        - Select the **color of the ink**, not the text.
+        - Try to respond quickly and accurately.
+        - The test consists of 20 trials.
     """)
-    st.session_state.age = st.slider("Select your age", 18, 80, 55)
 
-    if st.button("Start Test"):
-        st.session_state.started = True
-        st.session_state.trial = 0
+    # Age input
+    st.session_state.user_age = st.number_input(
+        "Enter your age (years):", min_value=10, max_value=120, step=1
+    )
+
+    if st.button("Start Test") and st.session_state.user_age is not None:
+        st.session_state.stage = "test"
+        st.session_state.current_idx = 0
+        st.session_state.results = []
         st.session_state.start_time = time.time()
-        st.session_state.trials_data = []
-        st.session_state.test_finished = False
 
-# ------------------ TRIAL SCREEN ------------------
-elif st.session_state.started and st.session_state.trial < TOTAL_TRIALS:
-    st.write(f"Trial {st.session_state.trial + 1} of {TOTAL_TRIALS}")
-    st.progress((st.session_state.trial + 1)/TOTAL_TRIALS)
+# ---------------- Test Screen ----------------
+elif st.session_state.stage == "test":
+    idx = st.session_state.current_idx
 
-    # Pick trial type
-    is_congruent = random.choice([True, False])
-    if is_congruent:
-        word = ink = random.choice(COLORS)
+    if idx >= NUM_QUESTIONS:
+        st.session_state.stage = "results"
+        st.session_state.test_finished = True
     else:
-        word = random.choice(COLORS)
-        ink = random.choice([c for c in COLORS if c != word])
+        trial = st.session_state.trials[idx]
+        st.write(f"Trial {idx+1} / {NUM_QUESTIONS}")
+        show_stimulus(trial)
 
-    # Show word
-    st.markdown(f"<h1 style='color:{COLOR_MAP[ink]}; font-size: 80px'>{word}</h1>", unsafe_allow_html=True)
+        if st.session_state.start_time is None:
+            st.session_state.start_time = time.time()
 
-    # User response
-    choice = st.radio("Select the INK color:", COLORS, key=f"trial_{st.session_state.trial}")
+        # Color buttons
+        cols = st.columns(len(COLOR_NAMES))
+        clicked_color = None
+        for i, color in enumerate(COLOR_NAMES):
+            if cols[i].button(color):
+                clicked_color = color[0]
 
-    if st.button("Submit", key=f"submit_{st.session_state.trial}"):
-        rt = (time.time() - st.session_state.start_time) * 1000  # ms
-        correct = choice == ink
+        # Record response
+        if clicked_color:
+            rt = time.time() - st.session_state.start_time
+            record_response(trial, clicked_color, rt)
+            st.session_state.current_idx += 1
+            st.session_state.start_time = time.time()
+            time.sleep(ISI)  # short interval before next trial
+            st.experimental_rerun()
 
-        # Save trial data
-        st.session_state.trials_data.append({
-            "trial": st.session_state.trial + 1,
-            "word": word,
-            "ink": ink,
-            "choice": choice,
-            "correct": correct,
-            "reaction_time_ms": rt
-        })
+# ---------------- Results Screen ----------------
+elif st.session_state.stage == "results" and st.session_state.test_finished:
+    st.header("Results")
+    df = pd.DataFrame(st.session_state.results)
 
-        next_trial()
-
-# ------------------ RESULTS SCREEN ------------------
-elif st.session_state.started and st.session_state.trial >= TOTAL_TRIALS and not st.session_state.test_finished:
-    st.subheader("Stroop Test Completed! Here are your results:")
-
-    df_results = pd.DataFrame(st.session_state.trials_data)
-
-    # Display per-trial results
-    st.dataframe(df_results)
-
-    # Compute summary stats
-    mean_cong = df_results[df_results["word"] == df_results["ink"]]["reaction_time_ms"].mean()
-    mean_incong = df_results[df_results["word"] != df_results["ink"]]["reaction_time_ms"].mean()
-    interference = mean_incong - mean_cong
-    errors = (~df_results["correct"]).sum()
-
-    st.write(f"Mean Congruent RT: {mean_cong:.1f} ms")
-    st.write(f"Mean Incongruent RT: {mean_incong:.1f} ms")
-    st.write(f"Interference: {interference:.1f} ms")
-    st.write(f"Total Errors: {errors}")
-
-    # Predict zone
-    X_user = np.array([[st.session_state.age, mean_cong, mean_incong, interference, errors]])
-    zone_pred = pipeline.predict(X_user)[0]
-    prob = pipeline.predict_proba(X_user)[0]
-    red_prob = prob[list(pipeline.classes_).index("red")] * 100
-
-    st.write(f"Predicted Zone: {zone_pred}")
-    st.write(f"Red Zone Probability: {red_prob:.1f}%")
-
-    if zone_pred == "blue":
-        st.success("BLUE ZONE — Superior executive control")
-    elif zone_pred == "green":
-        st.info("GREEN ZONE — Age-appropriate cognition")
+    if df.empty:
+        st.info("No data collected.")
     else:
-        st.error("RED ZONE — Elevated cognitive risk")
+        # Compute congruent/incongruent RTs
+        df["congruent"] = df.apply(lambda x: x["word"] == x["ink"], axis=1)
+        mean_cong = df[df["congruent"]]["reaction_time_s"].mean()
+        mean_incong = df[~df["congruent"]]["reaction_time_s"].mean()
+        interference = mean_incong - mean_cong
+        errors = (~df["correct"].astype(bool)).sum()
 
-    # Mark test finished
-    st.session_state.test_finished = True
+        st.write("### Stroop Test Summary")
+        st.metric("Mean Congruent RT (s)", f"{mean_cong:.3f}")
+        st.metric("Mean Incongruent RT (s)", f"{mean_incong:.3f}")
+        st.metric("Interference (s)", f"{interference:.3f}")
+        st.metric("Errors", errors)
+
+        # ML prediction
+        X_user = np.array([[st.session_state.user_age, mean_cong, mean_incong, interference, errors]])
+        zone_pred = model.predict(X_user)[0]
+        prob = model.predict_proba(X_user)[0]
+        red_prob = prob[list(model.classes_).index("red")] * 100
+
+        st.write("---")
+        st.write("## Predicted Zone")
+        st.write(f"Zone: {zone_pred}")
+        st.write(f"Red Zone Probability: {red_prob:.1f}%")
+
+        if zone_pred == "blue":
+            st.success("BLUE ZONE — Superior executive control")
+        elif zone_pred == "green":
+            st.info("GREEN ZONE — Age-appropriate cognition")
+        else:
+            st.error("RED ZONE — Elevated cognitive risk")
+
+        # Detailed trial-level table
+        st.write("### Trial-level Data")
+        st.dataframe(df)
+        csv = df.to_csv(index=False).encode("utf-8")
+        st.download_button("Download Results CSV", data=csv, file_name="stroop_results.csv", mime="text/csv")
 
     if st.button("Restart Test"):
-        reset_test()
+        reset_session()
+        st.experimental_rerun()
