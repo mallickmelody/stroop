@@ -54,9 +54,9 @@ if st.session_state.started and st.session_state.trial < 20:
         unsafe_allow_html=True
     )
 
-    choice = st.radio("Select the INK color:", COLORS, key=st.session_state.trial)
+    choice = st.radio("Select the INK color:", COLORS, key=f"trial_{st.session_state.trial}")
 
-    if st.button("Submit"):
+    if st.button("Submit", key=f"submit_{st.session_state.trial}"):
         rt = (time.time() - st.session_state.start_time) * 1000  # ms
 
         if choice != ink:
@@ -69,10 +69,12 @@ if st.session_state.started and st.session_state.trial < 20:
 
         st.session_state.trial += 1
         st.session_state.start_time = time.time()
+
+        # Safe rerun
         st.experimental_rerun()
 
 # ------------------ RESULTS ------------------
-elif st.session_state.started and st.session_state.trial == 20:
+elif st.session_state.started and st.session_state.trial >= 20:
 
     mean_cong = np.mean(st.session_state.cong_rt)
     mean_incong = np.mean(st.session_state.incong_rt)
