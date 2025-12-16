@@ -102,17 +102,16 @@ elif st.session_state.stage == "test":
         cols = st.columns(len(COLOR_NAMES))
         clicked_color = None
         for i, color in enumerate(COLOR_NAMES):
-            if cols[i].button(color):
+            if cols[i].button(color, key=f"trial_{idx}_{color}"):
                 clicked_color = color[0]
 
-        # Record response
+        # Record response and advance trial
         if clicked_color:
             rt = time.time() - st.session_state.start_time
             record_response(trial, clicked_color, rt)
             st.session_state.current_idx += 1
-            st.session_state.start_time = time.time()
+            st.session_state.start_time = None
             time.sleep(ISI)  # short interval before next trial
-            st.experimental_rerun()
 
 # ---------------- Results Screen ----------------
 elif st.session_state.stage == "results" and st.session_state.test_finished:
@@ -161,4 +160,3 @@ elif st.session_state.stage == "results" and st.session_state.test_finished:
 
     if st.button("Restart Test"):
         reset_session()
-        st.experimental_rerun()
